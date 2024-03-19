@@ -5,13 +5,13 @@
 #目录结构
 ```
 .
-├── client						//客户端
+├── client				//客户端
 │   ├── makefile
 │   ├── src
 │   │   ├── ！
-│   │   ├── data.c				//获取序列号和时间，打包和发送数据
+│   │   ├── data.c			//获取序列号和时间，打包和发送数据
 │   │   ├── data.h
-│   │   ├── debug.h				//调试打印
+│   │   ├── debug.h			//调试打印
 │   │   ├── ds18b20.c			//获取温度
 │   │   ├── ds18b20.h
 │   │   ├── makefile
@@ -23,10 +23,10 @@
 │       ├── main.c
 │       └── makefile
 ├── README.md
-└── servern						//服务器端
+└── servern				//服务器端
     ├── makefile
     ├── src
-    │   ├── debug.h
+    │   ├── debug.h                    //调试打印
     │   ├── makefile
     │   ├── socket_server.c
     │   ├── socket_server.h
@@ -35,5 +35,5 @@
     └── test
         ├── main.c
         ├── makefile
-        └── test.sh				//通过shell脚本代替make run的两条指令
+        └── test.sh			//通过shell脚本代替make run的两条指令
 
