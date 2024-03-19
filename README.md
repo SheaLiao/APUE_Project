@@ -23,7 +23,7 @@
 │       ├── main.c
 │       └── makefile
 ├── README.md
-└── servern				//服务器端
+└── server				//服务器端
     ├── makefile
     ├── src
     │   ├── debug.h                    //调试打印
