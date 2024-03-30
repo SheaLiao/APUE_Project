@@ -2,7 +2,7 @@
  *      Copyright:  (C) 2024 linuxer<linuxer@email.com>
  *                  All rights reserved.
  *
- *       Filename:  socket_server.c
+ *       Filename:  socket.c
  *    Description:  This file 
  *                 
  *        Version:  1.0.0(11/03/24)
@@ -12,8 +12,8 @@
  ********************************************************************************/
 
 
-#include "debug.h"
-#include "socket_server.h"
+#include "logger.h"
+#include "socket.h"
 
 
 int socket_server_init(char *listen_ip, int listen_port)
@@ -26,7 +26,7 @@ int socket_server_init(char *listen_ip, int listen_port)
         listenfd = socket(AF_INET, SOCK_STREAM, 0);
         if( listenfd < 0 )
         {
-                dbg_print("Use socket() to create a TCP socket failure: %s\n", strerror(errno));
+                log_error("Use socket() to create a TCP socket failure: %s\n", strerror(errno));
                 return -1;
         }
 
@@ -44,7 +44,7 @@ int socket_server_init(char *listen_ip, int listen_port)
         {
                 if( inet_pton(AF_INET, listen_ip, &servaddr.sin_addr) <= 0 )
                 {
-                        dbg_print("inet_pton() set listen IP address failure.\n");
+                        log_error("inet_pton() set listen IP address failure.\n");
                         rv = -2;
                         goto CleanUp;
                 }
@@ -52,14 +52,14 @@ int socket_server_init(char *listen_ip, int listen_port)
 
         if( bind(listenfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0 )
         {
-                dbg_print("Use bind() to bind the TCP socket failure: %s\n", strerror(errno));
+                log_error("Use bind() to bind the TCP socket failure: %s\n", strerror(errno));
                 rv = -3;
                 goto CleanUp;
         }
 
         if(listen(listenfd, 1024) < 0)
         {
-                dbg_print("Use bind() to bind the TCP socket failure: %s\n", strerror(errno));
+                log_error("Use bind() to bind the TCP socket failure: %s\n", strerror(errno));
                 rv = -4;
                 goto CleanUp;
         }
@@ -85,6 +85,6 @@ void set_socket_rlimit(void)
         limit.rlim_cur = limit.rlim_max;
         setrlimit(RLIMIT_NOFILE, &limit);
 
-        dbg_print("Set socket open fd max count to %ld\n",limit.rlim_max);
+        log_info("Set socket open fd max count to %ld\n",limit.rlim_max);
 }
 

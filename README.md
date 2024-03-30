@@ -5,35 +5,39 @@
 #目录结构
 ```
 .
-├── client				//客户端
-│   ├── makefile
-│   ├── src
-│   │   ├── ！
-│   │   ├── data.c			//获取序列号和时间，打包和发送数据
-│   │   ├── data.h
-│   │   ├── debug.h			//调试打印
-│   │   ├── ds18b20.c			//获取温度
+├── client
+│   ├── include
+│   │   ├── database.h
 │   │   ├── ds18b20.h
-│   │   ├── makefile
-│   │   ├── socket_client.c
-│   │   ├── socket_client.h
-│   │   ├── sql.c
-│   │   └── sql.h
-│   └── test
-│       ├── main.c
-│       └── makefile
+│   │   ├── logger.h
+│   │   ├── packet.h
+│   │   └── socket.h
+│   ├── makefile
+│   ├── socket_client.c
+│   ├── sqlite
+│   │   ├── build.sh
+│   │   └── makefile
+│   └── src
+│       ├── database.c
+│       ├── ds18b20.c
+│       ├── logger.c
+│       ├── makefile
+│       ├── packet.c
+│       └── socket.c
 ├── README.md
-└── server				//服务器端
+└── server
+    ├── include
+    │   ├── database.h
+    │   ├── logger.h
+    │   └── socket.h
     ├── makefile
-    ├── src
-    │   ├── debug.h                    //调试打印
-    │   ├── makefile
-    │   ├── socket_server.c
-    │   ├── socket_server.h
-    │   ├── sql.c
-    │   └── sql.h
-    └── test
-        ├── main.c
+    ├── socket_server.c
+    ├── sqlite
+    │   ├── build.sh
+    │   └── makefile
+    └── src
+        ├── database.c
+        ├── logger.c
         ├── makefile
-        └── test.sh			//通过shell脚本代替make run的两条指令
+        └── socket.c
 

@@ -1,17 +1,19 @@
-all:
-	@echo "Start compile library..."
-	make -C src
-	@echo "Start compile test program..."
-	make -C test
+APPNAME=socket_server
+LIBPATH=./lib/
+INCPATH=./include/
 
-run:
-	@echo "Start run test program..."
-	make run -C test
+CFLAGS+=-I${INCPATH}
+CFLAGS+=-I ./sqlite/install/include
+LDFLAGS+=-L${LIBPATH}
+LDFLAGS+=-L ./sqlite/install/lib
+
+CC=gcc
+
+all:
+	${CC} ${CFLAGS} socket_server.c -o ${APPNAME} ${LDFLAGS} -lmyserver -lsqlite3
 
 clean:
-	make clean -C src
-	make clean -C test
+	rm -f ${APPNAME}
 
-disclean:
-	rm -f lib/*.a
-	rm -f lib/*.so
+run:
+	export LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${LIBPATH} && ./socket_server -p 12345

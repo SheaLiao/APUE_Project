@@ -2,7 +2,7 @@
  *      Copyright:  (C) 2024 linuxer<linuxer@email.com>
  *                  All rights reserved.
  *
- *       Filename:  socket_server.h
+ *       Filename:  socket.h
  *    Description:  This file 
  *
  *        Version:  1.0.0(11/03/24)
@@ -11,8 +11,8 @@
  *                 
  ********************************************************************************/
 
-#ifndef	_SOCKET_SERVER_H_
-#define _SOCKET_SERVER_H_
+#ifndef	_SOCKET_H_
+#define _SOCKET_H_
 
 #include <string.h>
 #include <stdio.h>

@@ -10,12 +10,26 @@
  *      ChangeLog:  1, Release initial version on "11/03/24 15:41:42"
  *                 
  ********************************************************************************/
-
-#include <sys/epoll.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <errno.h>
+#include <ctype.h>
+#include <time.h>
+#include <pthread.h>
 #include <getopt.h>
-#include "debug.h"
-#include "sql.h"
-#include "socket_server.h"
+#include <libgen.h>
+#include <sys/types.h> 
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <sys/epoll.h>
+#include <sys/resource.h>
+
+#include "logger.h"
+#include "database.h"
+#include "socket.h"
 
 
 #define MAX_EVENTS 512
@@ -44,32 +58,30 @@ int main(int argc, char *argv[])
     int                 connfd = -1;
     int                 port = 0;
     int                 daemon_run = 0;
-    char                *progname = NULL;
-    int                 opt = -1;
 	int                 rv = -1;
     int                 i,j;
     int                 found = 0;
     int                 maxfd = 0;
     char                buf[1024];
-    float               temperature;
-    char                devid[32];
-    char                date[64];
-    char                time[64];
-	char                datetime[128];
-    sqlite3             *db;
+
+	char				*logfile = "socket_server.log";
+	int					loglevel = LOG_LEVEL_INFO;
+	int					logsize = 10;
+
     int                 epollfd = -1;
     struct epoll_event  event;
     struct epoll_event  event_array[MAX_EVENTS];
     int                 events;
+
     const char          *optstring = "bp:h";
+    int                 opt = -1;
     struct option		opts[] = {
 		{"daemon", no_argument, NULL, 'b'},
         {"prot", required_argument, NULL, 'p'},
         {"help", no_argument, NULL, 'h'},
         {NULL, 0, NULL, 0}
-        };
+    };
 
-    progname = basename(argv[0]);
 
     while ( (opt = getopt_long(argc, argv, optstring, opts, NULL)) != -1 )
     {
@@ -82,8 +94,8 @@ int main(int argc, char *argv[])
                 port = atoi(optarg);
                 break;
             case 'h':
-                print_usage(progname);
-                return EXIT_SUCCESS;
+                print_usage(argv[0]);
+                return 0;
 			default:
 				break;
         }
@@ -91,19 +103,24 @@ int main(int argc, char *argv[])
 
     if( !port )
     {
-        print_usage(progname);
+        print_usage(argv[0]);
         return -1;
     }
+
+	if( log_open(logfile, loglevel, logsize, THREAD_LOCK_NONE ) < 0 )
+	{
+		fprintf(stderr, "initial log system failure\n");
+	}
 
     set_socket_rlimit();
 
     listenfd = socket_server_init(NULL, port);
     if( listenfd < 0 )
     {
-        dbg_print("ERROR: %s server listen on port %d failure\n", argv[0],port);
+        log_error("%s server listen on port %d failure\n", argv[0],port);
         return -2;
     }
-    dbg_print("%s server start to listen on port %d\n", argv[0],port);
+    log_info("%s server start to listen on port %d\n", argv[0],port);
 
     if( daemon_run )
     {
@@ -113,7 +130,7 @@ int main(int argc, char *argv[])
     epollfd = epoll_create(MAX_EVENTS);
     if( epollfd < 0 )
     {
-        dbg_print("epoll_creat() failure:%s\n",strerror(errno));
+        log_error("epoll_creat() failure:%s\n",strerror(errno));
         return -3;
     }
 
@@ -122,23 +139,23 @@ int main(int argc, char *argv[])
 
     if( epoll_ctl(epollfd, EPOLL_CTL_ADD, listenfd, &event) < 0 )
     {
-        dbg_print("epoll add listen socket failure:%s\n",strerror(errno));
+        log_error("epoll add listen socket failure:%s\n",strerror(errno));
         return -4;
     }
 
-    db = open_database();
+	open_database("server.db");
 
     while(1)
     {
         events = epoll_wait(epollfd, event_array, MAX_EVENTS, -1);
         if( events < 0 )
         {
-            dbg_print("epoll failure: %s\n", strerror(errno));
+            log_error("epoll failure: %s\n", strerror(errno));
             break;
         }
         else if( events == 0 )
         {
-            dbg_print("epoll get timeout\n");
+            log_debug("epoll get timeout\n");
             continue;
         }
 
@@ -146,7 +163,7 @@ int main(int argc, char *argv[])
         {
             if( (event_array[i].events&EPOLLERR) || (event_array[i].events&EPOLLHUP) )
             {
-                dbg_print("epoll_wait get error on fd[%d]: %s\n", event_array[i].data.fd, strerror(errno));
+                log_error("epoll_wait get error on fd[%d]: %s\n", event_array[i].data.fd, strerror(errno));
                 epoll_ctl(epollfd, EPOLL_CTL_DEL, event_array[i].data.fd, NULL);
                 close(event_array[i].data.fd);
             }
@@ -156,7 +173,7 @@ int main(int argc, char *argv[])
                 connfd = accept(listenfd, (struct sockaddr *)NULL, NULL);
                 if( connfd < 0 )
                 {
-					dbg_print("Accept new client failure:%s\n",strerror(errno));
+					log_error("Accept new client failure:%s\n",strerror(errno));
 
                     continue;
                 }
@@ -165,18 +182,18 @@ int main(int argc, char *argv[])
                 event.events = EPOLLIN;
                 if( epoll_ctl(epollfd, EPOLL_CTL_ADD, connfd, &event) < 0 )
                 {
-                    dbg_print("epoll add client socket failure: %s\n", strerror(errno));
+                    log_error("epoll add client socket failure: %s\n", strerror(errno));
                     close(event_array[i].data.fd);
                     continue;
                 }
-                dbg_print("epoll add new client socket[%d] ok.\n", connfd);
+                log_info("epoll add new client socket[%d] ok.\n", connfd);
             }
             else
             {
                 rv = read(event_array[i].data.fd, buf, sizeof(buf));
                 if( rv <= 0 )
                 {
-                    dbg_print("socket[%d] read failure or get disconncet and will be removed.\n",
+                    log_error("socket[%d] read failure or get disconncet and will be removed.\n",
                     event_array[i].data.fd);
                     epoll_ctl(epollfd, EPOLL_CTL_DEL, event_array[i].data.fd, NULL);
                     close(event_array[i].data.fd);
@@ -184,20 +201,16 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-					dbg_print("socket[%d] read get %d byte data\n", event_array[i].data.fd, rv);
+					log_info("socket[%d] read get %d byte data\n", event_array[i].data.fd, rv);
 
-					sscanf(buf,"%s %f %s %s ", devid, &temperature, date, time);//解析数据
-					memset(datetime,0,sizeof(datetime));
-					snprintf(datetime,sizeof(datetime),"%s %s",date,time);
-
-                    printf("data2:%s %.2f %s\n",devid, temperature, datetime);
-                    store_database(db,devid,&temperature,datetime);//存入数据库
+                    printf("%s\n", buf);
+                    insert_database(buf, sizeof(buf));//存入数据库
                 }
             }
         }
     }
 
-    sqlite3_close(db);
+    close_database();
 
 CleanUp:
     close(listenfd);

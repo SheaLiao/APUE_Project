@@ -2,19 +2,24 @@
  *      Copyright:  (C) 2024 linuxer<linuxer@email.com>
  *                  All rights reserved.
  *
- *       Filename:  ds18b20.h
+ *       Filename:  database.h
  *    Description:  This file 
  *
- *        Version:  1.0.0(13/03/24)
+ *        Version:  1.0.0(22/03/24)
  *         Author:  Liao Shengli <linuxer@email.com>
- *      ChangeLog:  1, Release initial version on "13/03/24 14:37:11"
+ *      ChangeLog:  1, Release initial version on "22/03/24 17:39:04"
  *                 
  ********************************************************************************/
 
-#ifndef _DS18B20_H_
-#define _DS18B20_H_
+#ifndef _DATABASE_H_
+#define _DATABASE_H_
 
-extern int get_temperature(float *temperature);
-
+extern int open_database(const char *db_file);
+extern void close_database();
+extern int insert_database(void *pack, int size);
 
 #endif
+
+
+
+
