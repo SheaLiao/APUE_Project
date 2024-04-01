@@ -30,5 +30,6 @@ extern int get_devid(char *devid, int len);
 extern int get_time(char *datetime);
 extern int sample_data(packet_t *pack);
 extern int packet_data(packet_t *pack, char *buf, int size);
+extern int packet_json(packet_t *pack, char *buf, int size);
 
 #endif

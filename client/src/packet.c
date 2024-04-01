@@ -15,10 +15,12 @@
 #include <string.h>
 #include <time.h>
 #include <stdlib.h>
+#include <cJSON.h>
 
 #include "packet.h"
 #include "ds18b20.h"
 #include "logger.h"
+
 
 int get_devid(char *devid, int len)
 {
@@ -58,11 +60,27 @@ int sample_data(packet_t *pack)
 	return 0;
 }
 
+/*字符串形式*/
 int packet_data(packet_t *pack, char *pack_buf, int size)
 {
-	//sample_data(pack);
 
 	memset(pack_buf, 0, size);
 	snprintf(pack_buf, size, "deviceID:%s | temperature:%.2f | time:%s", pack->devid, pack->temp, pack->datetime);
+	return strlen(pack_buf);
+}
+
+
+/*JSON格式*/
+int packet_json(packet_t *pack, char *pack_buf, int size)
+{
+	cJSON *json = cJSON_CreateObject();
+
+	cJSON_AddStringToObject(json, "deviceID", pack->devid);
+	cJSON_AddNumberToObject(json, "temperature", pack->temp);
+	cJSON_AddStringToObject(json, "time", pack->datetime);
+	snprintf(pack_buf, size, cJSON_Print(json));
+	
+	cJSON_Delete(json);
+
 	return strlen(pack_buf);
 }

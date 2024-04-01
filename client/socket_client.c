@@ -18,12 +18,14 @@
 #include <errno.h>
 #include <string.h>
 #include <getopt.h>
+#include <cJSON.h>
 
 #include "database.h"
 #include "ds18b20.h"
 #include "logger.h"
 #include "packet.h"
 #include "socket.h"
+#include "proc.h"
 
 int check_sample_time(int interval, time_t *last_time);
 
@@ -58,7 +60,7 @@ int main(int argc, char *argv[])
 	char			pack_buf[1024];
 	int				pack_bytes= 0;
 	packet_t		pack;
-	pack_proc_t		pack_proc = packet_data;
+	pack_proc_t		pack_proc = packet_json;
 
 	int				opt = -1;
 	const char		*optstring = "i:p:t:h";
@@ -95,6 +97,8 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	install_signal();
+
 	if( !servip || !port )
 	{
 		print_usage( argv[0] );
@@ -110,7 +114,7 @@ int main(int argc, char *argv[])
 	open_database("client.db");
 	socket_init(&sock, servip, port);
 	
-	while(1)
+	while( !g_signal.stop )
 	{
 		time_flag = 0;	
 		if( check_sample_time(interval, &last_time) )
@@ -118,11 +122,8 @@ int main(int argc, char *argv[])
 			log_info("Start sample\n");
 			time_flag = 1;
 			
-			get_temperature(&pack.temp);
-			get_devid(pack.devid, MAX_ID_LEN);
-			get_time(pack.datetime);
+			sample_data(&pack);
 
-			//pack_bytes = packet_data(&pack, pack_buf, sizeof(pack_buf));
 			pack_bytes = pack_proc(&pack, pack_buf, sizeof(pack_buf));
 			printf("pack_bytes:%d, data:%s\n", pack_bytes, pack_buf);
 		}
