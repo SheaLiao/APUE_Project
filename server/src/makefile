@@ -1,7 +1,7 @@
 LIBNAME=myserver
 INSTPATH=`pwd`/../lib/ 
 INCPATH=`pwd`/../include/ 
-SQLPATH=`pwd`/../sqlite/install/include/ 
+SQLPATH=`pwd`/../openlibs/sqlite/install/include/ 
 
 CFLAGS+=-I${INCPATH}
 CFLAGS+=-I${SQLPATH}

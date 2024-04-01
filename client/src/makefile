@@ -1,10 +1,12 @@
 LIBNAME=myclient
 INSTPATH=`pwd`/../lib/ 
 INCPATH=`pwd`/../include/ 
-SQLPATH=`pwd`/../sqlite/install/include/ 
+SQLPATH=`pwd`/../openlibs/sqlite/install/include/ 
+JSONPATH=`pwd`/../openlibs/cJSON/install/include/cjson/
 
 CFLAGS+=-I${INCPATH}
 CFLAGS+=-I${SQLPATH}
+CFLAGS+=-I${JSONPATH}
 
 CC=gcc
 AR=ar 
