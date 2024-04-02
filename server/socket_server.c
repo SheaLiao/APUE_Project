@@ -30,6 +30,7 @@
 #include "logger.h"
 #include "database.h"
 #include "socket.h"
+#include "proc.h"
 
 
 #define MAX_EVENTS 512
@@ -101,6 +102,8 @@ int main(int argc, char *argv[])
         }
     }
 
+	install_signal();
+
     if( !port )
     {
         print_usage(argv[0]);
@@ -145,7 +148,7 @@ int main(int argc, char *argv[])
 
 	open_database("server.db");
 
-    while(1)
+    while( !g_signal.stop )
     {
         events = epoll_wait(epollfd, event_array, MAX_EVENTS, -1);
         if( events < 0 )
