@@ -47,7 +47,6 @@ int socket_init(socket_t *sock, char *hostname, int port)
 	strncpy(sock->servip, hostname, 64);
 	sock->port = port;
 	sock->net_state = 0;
-
 	return 0;
 }
 
@@ -68,11 +67,11 @@ int socket_close(socket_t *sock)
  * input args  : $sock : socket context pointer
  * return value: <0: failure  0:ok
  */
-void hostname_to_ip(char *hostname)
+void hostname_to_ip(char *hostname, char *servip, int size)
 {
 	struct hostent		*host;
 	char				**ptr = NULL;
-	
+	int					flag = 0;
 	host = gethostbyname(hostname);
 	if( !host )
 	{
@@ -87,14 +86,18 @@ void hostname_to_ip(char *hostname)
 			ptr = host->h_addr_list;
 			for( ; *ptr != NULL; ptr++ )
 			{
-				inet_ntop(host->h_addrtype, *ptr, hostname, sizeof(hostname));
+				inet_ntop(host->h_addrtype, *ptr, servip, size);
+				flag = 1;
 			}
 			break;
 		default:
 			log_error("unknown address type\n");
 			break;
 	}
-	log_debug("get ip [%s] successfully\n", hostname);
+	if( flag == 1 )
+	{
+		log_debug("get ip [%s] successfully\n", servip);
+	}
 	return ;
 }
 
@@ -129,6 +132,7 @@ int socket_connect(socket_t *sock)
 	int						rv = -1;
 	int						fd = 0;
 	struct sockaddr_in		serv_addr;
+	char					ip[64];
 
 	//socket_close(sock);
 
@@ -144,7 +148,8 @@ int socket_connect(socket_t *sock)
 	rv = judge_ip_hostname(sock->servip);
 	if( rv < 0 )
 	{
-		hostname_to_ip(sock->servip);
+		hostname_to_ip(sock->servip, ip, sizeof(ip));
+		strncpy(sock->servip, ip, 64);
 	}
 
 	memset(&serv_addr, 0, sizeof(serv_addr));
