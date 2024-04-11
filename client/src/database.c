@@ -13,12 +13,14 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include <unistd.h>
 #include <sqlite3.h>
 
 #include "database.h"
 #include "logger.h"
 
+#define TABLE_NAME		"PackTable"
 
 static sqlite3 *s_db = NULL;
 
@@ -31,7 +33,7 @@ int open_database(const char *db_file)
 {
     char        *errmsg = NULL;
     int         rc;
-    char        *sql;
+    char        sql[SQL_COMMAND_LEN] = {0};
 
     rc = sqlite3_open(db_file, &s_db);
     if( rc )
@@ -43,7 +45,7 @@ int open_database(const char *db_file)
     //创建表
 	sqlite3_exec(s_db, "pragma synchronous = OFF;", 0, 0, 0); //不与当前磁盘同步
 	sqlite3_exec(s_db, "pragma auto_vacuum = 1;", 0, 0, 0);
-    sql = "CREATE TABLE IF NOT EXISTS Temp ( packet blob );";
+    snprintf(sql, sizeof(sql), "CREATE TABLE IF NOT EXISTS %s ( packet blob );", TABLE_NAME);
     rc = sqlite3_exec(s_db, sql, 0, 0, &errmsg);
     if( rc != SQLITE_OK )
     {
@@ -78,7 +80,7 @@ int insert_database(void *pack, int size)
 {
 	char			*errmsg = NULL;
 	int				rc = 0;
-	char			*sql;
+    char        	sql[SQL_COMMAND_LEN] = {0};
 	sqlite3_stmt	*stat = NULL;
 
 	if( !s_db )
@@ -88,7 +90,7 @@ int insert_database(void *pack, int size)
 		goto OUT;
 	}
 
-	sql = sqlite3_mprintf("INSERT INTO Temp (packet) VALUES (?)");
+	snprintf(sql, sizeof(sql), "INSERT INTO %s (packet) VALUES (?)", TABLE_NAME);
 	rc = sqlite3_prepare_v2(s_db, sql, -1, &stat, NULL);
 	if( rc != SQLITE_OK )
 	{
@@ -97,7 +99,7 @@ int insert_database(void *pack, int size)
 		goto OUT;
 	}
 
-	sqlite3_bind_blob(stat, 1, pack, size, NULL);
+	rc = sqlite3_bind_blob(stat, 1, pack, size, NULL);
 	if( rc != SQLITE_OK )
 	{
 		log_error("insert sqlite3_bind_blob failure\n");
@@ -105,8 +107,8 @@ int insert_database(void *pack, int size)
 		goto OUT;
 	}
 
-	sqlite3_step(stat);
-	if( rc != SQLITE_OK )
+	rc = sqlite3_step(stat);
+	if( rc != SQLITE_DONE && rc != SQLITE_ROW )
 	{
 		log_error("insert sqlite3_step failure\n");
 		rc = -4;
@@ -136,39 +138,36 @@ OUT:
 int query_database()
 {
 	char	*errmsg = NULL;
-	char	*sql;
 	int		rc = 0;
-	char	**dbResult;
-	int		nRow = 0;
-	int		nColumn = 0;
-	
+    char    sql[SQL_COMMAND_LEN] = {0};
+	char	**results;
+	int		rows, columns;
+
 	if( !s_db )
 	{
 		log_error("open database failure\n");
 		return -5;
 	}
 
-	sql = "SELECT * FROM Temp";
-	rc = sqlite3_get_table(s_db, sql, &dbResult, &nRow, &nColumn,&errmsg);
+	snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM %s", TABLE_NAME);
+	rc = sqlite3_get_table(s_db, sql, &results, &rows, &columns, &errmsg);
 	if( rc != SQLITE_OK )
     {
-        log_error("database select error: %s\n", errmsg);
+        log_error("delete database failure: %s\n", errmsg);
         sqlite3_free(errmsg);
 		return -6;
     }
 	else
 	{
-		if( nRow > 0 )
+		if( rows > 0 && columns > 0 )
 		{
-			log_debug("database is not null\n");
-			return 1;
+			rc = atoi(results[1]);
 		}
-		else
-		{
-			return -7;
-		}
-	}
 
+		sqlite3_free_table(results);
+	}
+	
+	return rc;
 }
 
 /* description : pop a row of data
@@ -179,7 +178,7 @@ int query_database()
 int pop_database(void *pack, int size, int *bytes)
 {
 	char			*errmsg = NULL;
-	char			*sql;
+    char    		sql[SQL_COMMAND_LEN] = {0};
 	int				rc = 0;
 	sqlite3_stmt	*stat = NULL;
 	const void 		*blob_ptr = NULL;
@@ -191,17 +190,17 @@ int pop_database(void *pack, int size, int *bytes)
 		goto OUT;
 	}
 	
-	sql = "SELECT packet FROM Temp WHERE rowid = (SELECT rowid FROM Temp LIMIT 1)";
+	snprintf(sql, sizeof(sql), "SELECT packet FROM %s WHERE rowid = (SELECT rowid FROM %s LIMIT 1)", TABLE_NAME, TABLE_NAME);
 	rc = sqlite3_prepare_v2(s_db, sql, -1, &stat, NULL);
-	if( rc != SQLITE_OK )
+	if( rc != SQLITE_OK || !stat)
 	{
 		log_error("pop sqlite3_prepare_v2 failure\n");
 		rc = -2;
 		goto OUT;
 	}	
 
-	sqlite3_step(stat);
-	if( rc != SQLITE_OK )
+	rc = sqlite3_step(stat);
+	if( rc != SQLITE_DONE && rc != SQLITE_ROW )
 	{
 		log_error("pop sqlite3_step failure\n");
 		rc = -3;
@@ -248,11 +247,11 @@ OUT:
  */
 int delete_database()
 {
+    char    sql[SQL_COMMAND_LEN] = {0};
 	char	*errmsg = NULL;
-	char	*sql;
 	int		rc = 0;
 
-	sql = "DELETE FROM Temp WHERE rowid IN (SELECT rowid FROM Temp LIMIT 1) ";
+	snprintf(sql, sizeof(sql), "DELETE FROM %s WHERE rowid IN (SELECT rowid FROM %s LIMIT 1);", TABLE_NAME, TABLE_NAME);
 	rc = sqlite3_exec(s_db, sql, 0, 0, &errmsg);
 	if( rc != SQLITE_OK )
     {

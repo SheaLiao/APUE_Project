@@ -14,6 +14,8 @@
 #ifndef _DATABASE_H_
 #define _DATABASE_H_
 
+#define SQL_COMMAND_LEN		256
+
 extern int open_database(const char *db_file);
 extern void close_database();
 extern int insert_database(void *pack, int size);

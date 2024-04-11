@@ -32,10 +32,13 @@ int check_sample_time(int interval, time_t *last_time);
 void print_usage(char *progname)
 {
     printf("Usage: %s [OPTION]...\n",progname);
+
     printf("-i(--ipaddr): sepcify server IP address.\n");
     printf("-p(--port): sepcify server port.\n");
     printf("-t(--interval): sepcify sample interval.\n");
-    printf("-h(--help): print this help information.\n");
+	printf("-d(--debug): running in debug mode.\n");
+	printf("-b(--daemon): set program running on background.\n");
+	printf("-h(--help): print this help information.\n");
 
 	printf("\nExample: %s -i 192.168.2.40 -p 8888 -t 10\n", progname);
     return ;
@@ -44,11 +47,12 @@ void print_usage(char *progname)
 
 int main(int argc, char *argv[])
 {
+	int				daemon_run = 0;
 	int				rv = -1;
 	int				time_flag = 0;
 
 	char			*logfile = "socket_client.log";
-	int				loglevel = LOG_LEVEL_INFO;
+	int				loglevel = LOG_LEVEL_DEBUG;
 	int				logsize = 10;
 
 	char			*servip = NULL;
@@ -63,11 +67,13 @@ int main(int argc, char *argv[])
 	pack_proc_t		pack_proc = packet_json;
 
 	int				opt = -1;
-	const char		*optstring = "i:p:t:h";
+	const char		*optstring = "i:p:t:dbh";
 	struct option	opts[] = {
 		{"ipaddr", required_argument, NULL, 'i'},
 		{"port", required_argument, NULL, 'p'},
 		{"interval", required_argument, NULL, 't'},
+		{"debug", no_argument, NULL, 'd'},
+		{"daemon", no_argument, NULL, 'b'},
 		{"help", no_argument, NULL, 'h'},
 		{NULL, 0, NULL, 0}
 	};
@@ -88,6 +94,16 @@ int main(int argc, char *argv[])
 				interval = atoi(optarg);
 				break;
 
+			case 'd':
+				daemon_run = 0;
+				logfile = "console";
+				loglevel = LOG_LEVEL_INFO;
+				break;
+
+			case 'b':
+				daemon_run = 1;
+				break;
+
 			case 'h':
 				print_usage(argv[0]);
 				return 0;
@@ -97,9 +113,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	install_signal();
-
-	if( !servip || !port )
+	if( !servip || !port || !interval)
 	{
 		print_usage( argv[0] );
 		return 0;
@@ -111,9 +125,27 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	open_database("client.db");
-	socket_init(&sock, servip, port);
-	
+	install_signal();
+
+	if( daemon_run )
+	{
+		daemon(0, 0);
+	}
+
+	rv = open_database("client.db");
+	if( rv < 0 )
+	{
+		log_error("open database failure\n");
+		return -2;
+	}
+
+	rv = socket_init(&sock, servip, port);
+	if( rv < 0 )
+	{
+		log_error("init socket failure\n");
+		return -3;
+	}
+
 	while( !g_signal.stop )
 	{
 		time_flag = 0;	
@@ -125,7 +157,7 @@ int main(int argc, char *argv[])
 			sample_data(&pack);
 
 			pack_bytes = pack_proc(&pack, pack_buf, sizeof(pack_buf));
-			printf("pack_bytes:%d, data:%s\n", pack_bytes, pack_buf);
+			log_info("pack_bytes:%d, data:%s\n", pack_bytes, pack_buf);
 		}
 		
 		if( sock.fd < 0 )
@@ -158,8 +190,9 @@ int main(int argc, char *argv[])
 		}
 
 		/*send data of database*/
-		if( query_database() > 0 )
+		if( (rv = query_database()) > 0 )
 		{
+			log_info("rv=%d\n", rv);
 			log_info("Socket send data of database\n");
 			rv = pop_database(pack_buf, sizeof(pack_buf), &pack_bytes);
 			rv = socket_send(&sock, pack_buf, pack_bytes);
