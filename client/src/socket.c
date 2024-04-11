@@ -68,69 +68,160 @@ int socket_close(socket_t *sock)
 }
 
 
+/*  description: socket connect to server in block mode
+ *   input args:
+ *               $sock:  socket context pointer
+ * return value: <0: failure   0:ok
+ */
+int socket_connect(socket_t *sock)
+{
+    int                 rv = 0;
+    int                 sockfd = 0;
+    char                service[20];
+    struct addrinfo     hints, *rp;
+    struct addrinfo    *res = NULL;
+    struct in_addr      inaddr;
+    struct sockaddr_in  addr;
+    int                 len = sizeof(addr);
+
+    if( !sock )
+        return -1;
+
+    socket_close(sock);
+
+    /*+--------------------------------------------------+
+     *| use getaddrinfo() to do domain name translation  |
+     *+--------------------------------------------------+*/
+
+    memset(&hints, 0, sizeof(struct addrinfo));
+    hints.ai_family = AF_INET; /* Only support IPv4 */
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP; /* TCP protocol */
+
+    /* If $host is a valid IP address, then don't use name resolution */
+    if( inet_aton(sock->servip, &inaddr) )
+    {
+        log_info("%s is a valid IP address, don't use domain name resolution.\n", sock->servip);
+        hints.ai_flags |= AI_NUMERICHOST;
+    }
+
+    /* Obtain address(es) matching host/port */
+    snprintf(service, sizeof(service), "%d", sock->port);
+    if( (rv=getaddrinfo(sock->servip, service, &hints, &res)) )
+    {
+        log_error("getaddrinfo() parser [%s:%s] failed: %s\n", sock->servip, service, gai_strerror(rv));
+        return -3;
+    }
+    
+	/* getaddrinfo() returns a list of address structures. Try each
+       address until we successfully connect or bind */
+    for (rp=res; rp!=NULL; rp=rp->ai_next)
+    {
+#if 1 
+        char                  ipaddr[INET_ADDRSTRLEN];
+        struct sockaddr_in   *sp = (struct sockaddr_in *) rp->ai_addr;
+
+        /* print domain name translation result */
+        memset( ipaddr, 0, sizeof(ipaddr) );
+        if( inet_ntop(AF_INET, &sp->sin_addr, ipaddr, sizeof(ipaddr)) )
+        {
+            log_info("domain name resolution [%s->%s]\n", sock->servip, ipaddr);
+        }
+#endif
+
+        /*  Create the socket */
+        sockfd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if( sockfd < 0)
+        {
+            log_error("socket() create failed: %s\n", strerror(errno));
+            rv = -3;
+            continue;
+        }
+
+        /* connect to server */
+        rv = connect(sockfd, rp->ai_addr, len);
+        if( 0 == rv )
+        {
+            sock->fd = sockfd;
+            log_info("Connect to server[%s:%d] on fd[%d] successfully!\n", sock->servip, sock->port, sockfd);
+            break;
+        }
+        else
+        {
+            /* socket connect get error, try another IP address */
+            close(sockfd);
+            continue;
+        }
+    }
+
+    freeaddrinfo(res);
+    return rv;
+}
+
+#if 0
 /* description : resolve domain name
  * input args  : $hostname: domain name
  * return value: NULL: failure  ip_list:ok
  */
 char **hostname_to_ip(char *hostname)
 {
-    struct hostent *host;
-    int ip_count = 0;
-    char **ptr = NULL;
-    char **ip_list = malloc(MAX_IP_COUNT * sizeof(char *));
-    
+	struct hostent *host;
+	int ip_count = 0;
+	char **ptr = NULL;
+	char **ip_list = malloc(MAX_IP_COUNT * sizeof(char *));
+
 	if (ip_list == NULL)
-    {
-        log_error("malloc failure\n");
-        return NULL;
-    }
+	{
+		log_error("malloc failure\n");
+		return NULL;
+	}
 
-    host = gethostbyname(hostname);
-    if (!host)
-    {
-        printf("gethostbyname failure: %s\n", strerror(errno));
-        free(ip_list);
-        return NULL;
-    }
+	host = gethostbyname(hostname);
+	if (!host)
+	{
+		printf("gethostbyname failure: %s\n", strerror(errno));
+		free(ip_list);
+		return NULL;
+	}
 
-    switch (host->h_addrtype)
-    {
-    case AF_INET:
-    case AF_INET6:
-        ptr = host->h_addr_list;
-        for (; *ptr != NULL && ip_count < MAX_IP_COUNT; ptr++)
-        {
-            char *servip = malloc(INET6_ADDRSTRLEN * sizeof(char));
-            if (servip == NULL)
-            {
-                perror("malloc");
-                continue;
-            }
-            if (inet_ntop(host->h_addrtype, *ptr, servip, INET6_ADDRSTRLEN) == NULL)
-            {
-                perror("inet_ntop");
-                free(servip);
-                continue;
-            }
-            ip_list[ip_count++] = servip;
-        }
-        break;
-    default:
-        printf("unknown address type\n");
-        break;
-    }
+	switch (host->h_addrtype)
+	{
+		case AF_INET:
+		case AF_INET6:
+			ptr = host->h_addr_list;
+			for (; *ptr != NULL && ip_count < MAX_IP_COUNT; ptr++)
+			{
+				char *servip = malloc(INET6_ADDRSTRLEN * sizeof(char));
+				if (servip == NULL)
+				{
+					perror("malloc");
+					continue;
+				}
+				if (inet_ntop(host->h_addrtype, *ptr, servip, INET6_ADDRSTRLEN) == NULL)
+				{
+					perror("inet_ntop");
+					free(servip);
+					continue;
+				}
+				ip_list[ip_count++] = servip;
+			}
+			break;
+		default:
+			printf("unknown address type\n");
+			break;
+	}
 
-    if (ip_count > 0)
-    {
-        printf("get IP [%s] successfully\n", hostname);
-        ip_list[ip_count] = NULL; // 用 NULL 结束 IP 地址列表
-        return ip_list;
-    }
-    else
-    {
-        free(ip_list);
-        return NULL;
-    }
+	if (ip_count > 0)
+	{
+		printf("get IP [%s] successfully\n", hostname);
+		ip_list[ip_count] = NULL; // 用 NULL 结束 IP 地址列表
+		return ip_list;
+	}
+	else
+	{
+		free(ip_list);
+		return NULL;
+	}
 }
 
 
@@ -149,60 +240,62 @@ int socket_connect(socket_t *sock)
 	{
 		return -1;
 	}
-	
+
 	socket_close(sock);
 
-	char **ip_list = hostname_to_ip(sock->servip);
-	if( ip_list == NULL )
-	{
-		log_error("resove ip failure\n");
-		return -2;
-	}
-	
+
 	if( (inet_addr(sock->servip))  == INADDR_NONE )
 	{
-		for(i=0; ip_list[i]!=NULL; i++)
+		char **ip_list = hostname_to_ip(sock->servip);
+		if( ip_list == NULL )
 		{
-			fd = socket(AF_INET, SOCK_STREAM, 0);
-			if( fd < 0 )
-			{
-				log_error("Creat socket failure:%s\n", strerror(errno));
-				close(fd);
-				return -4;
-			}
-			log_info("Socket create fd[%d] successfully\n", fd);
-		
-
-			memset(&serv_addr, 0, sizeof(serv_addr));
-			serv_addr.sin_family = AF_INET;
-			serv_addr.sin_port = htons(sock->port);
-			inet_aton(ip_list[i], &serv_addr.sin_addr);
-	
-			rv = connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-			if( rv < 0 )
-			{
-				log_error("Connect to server [%s:%d] failure:%s\n", ip_list[i], sock->port, strerror(errno));
-				close(fd);
-				return -5;
-			}
-			else
-			{
-				sock->fd = fd;
-				log_info("Connect to server [%s:%d] successfully\n", ip_list[i], sock->port);
-				break;
-			}
+			log_error("resove ip failure\n");
+			return -2;
 		}
-	
 	}
+	for(i=0; ip_list[i]!=NULL; i++)
+	{
+		fd = socket(AF_INET, SOCK_STREAM, 0);
+		if( fd < 0 )
+		{
+			log_error("Creat socket failure:%s\n", strerror(errno));
+			close(fd);
+			return -4;
+		}
+		log_info("Socket create fd[%d] successfully\n", fd);
+
+
+		memset(&serv_addr, 0, sizeof(serv_addr));
+		serv_addr.sin_family = AF_INET;
+		serv_addr.sin_port = htons(sock->port);
+		inet_aton(ip_list[i], &serv_addr.sin_addr);
+
+		rv = connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+		if( rv < 0 )
+		{
+			log_error("Connect to server [%s:%d] failure:%s\n", ip_list[i], sock->port, strerror(errno));
+			close(fd);
+			return -5;
+		}
+		else
+		{
+			sock->fd = fd;
+			log_info("Connect to server [%s:%d] successfully\n", ip_list[i], sock->port);
+			break;
+		}
+	}
+
 
 	for(i=0; ip_list[i]!=NULL; i++)
 	{
 		free(ip_list[i]);
 	}
 	free(ip_list);
-	
+
 	return rv;
 }
+
+#endif
 
 /* description : judge socket state 
  * input args  : $sock: socket context pointer
@@ -211,8 +304,8 @@ int socket_connect(socket_t *sock)
 int judge_socket_state(socket_t *sock)
 {
 	int             	sock_opt;
-    struct tcp_info 	optval;
-    int             	opt_len = sizeof(optval);
+	struct tcp_info 	optval;
+	int             	opt_len = sizeof(optval);
 
 	sock_opt = getsockopt(sock->fd, IPPROTO_TCP, TCP_INFO, &optval, (socklen_t *)&opt_len);
 	if( optval.tcpi_state != TCP_ESTABLISHED )
