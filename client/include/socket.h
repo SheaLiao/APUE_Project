@@ -26,7 +26,6 @@ typedef struct socket_s
 
 extern int socket_init(socket_t *sock, char *hostname, int port);
 extern int socket_close(socket_t *sock);
-//extern char **hostname_to_ip(char *hostname);
 extern int socket_connect(socket_t *sock);
 extern int judge_socket_state(socket_t *sock);
 extern int socket_send(socket_t *sock, char *data, int bytes);
