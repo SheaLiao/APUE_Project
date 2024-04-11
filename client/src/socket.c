@@ -57,6 +57,11 @@ int socket_init(socket_t *sock, char *hostname, int port)
  */
 int socket_close(socket_t *sock)
 {
+	if( !sock )
+	{
+		return -1;
+
+	}
 	close(sock->fd);
 	sock->fd = -1;
 	return 0;
@@ -64,62 +69,68 @@ int socket_close(socket_t *sock)
 
 
 /* description : resolve domain name
- * input args  : $sock : socket context pointer
- * return value: <0: failure  0:ok
+ * input args  : $hostname: domain name
+ * return value: NULL: failure  ip_list:ok
  */
-void hostname_to_ip(char *hostname, char *servip, int size)
+char **hostname_to_ip(char *hostname)
 {
-	struct hostent		*host;
-	char				**ptr = NULL;
-	int					flag = 0;
-	host = gethostbyname(hostname);
-	if( !host )
-	{
-		log_error("gethostbyname failure:%s\n",strerror(errno));
-		return;
-	}
+    struct hostent *host;
+    int ip_count = 0;
+    char **ptr = NULL;
+    char **ip_list = malloc(MAX_IP_COUNT * sizeof(char *));
+    
+	if (ip_list == NULL)
+    {
+        log_error("malloc failure\n");
+        return NULL;
+    }
 
-	switch( host->h_addrtype )
-	{
-		case AF_INET:
-		case AF_INET6:
-			ptr = host->h_addr_list;
-			for( ; *ptr != NULL; ptr++ )
-			{
-				inet_ntop(host->h_addrtype, *ptr, servip, size);
-				flag = 1;
-			}
-			break;
-		default:
-			log_error("unknown address type\n");
-			break;
-	}
-	if( flag == 1 )
-	{
-		log_debug("get ip [%s] successfully\n", servip);
-	}
-	return ;
-}
+    host = gethostbyname(hostname);
+    if (!host)
+    {
+        printf("gethostbyname failure: %s\n", strerror(errno));
+        free(ip_list);
+        return NULL;
+    }
 
-/* description : judge ip or hostname
- * input args  : $servip: connect server servip for client mode
- * return value: <0: hostname  >0: ip
- */
-int judge_ip_hostname(char *servip)
-{
-	unsigned long	add;
-	
-	add = inet_addr(servip);
-	if( add == INADDR_NONE )
-	{
-		log_debug("It is a hostname\n");
-		return -3;
-	}
-	else
-	{
-		log_debug("It is an ip\n");
-		return 1;
-	}
+    switch (host->h_addrtype)
+    {
+    case AF_INET:
+    case AF_INET6:
+        ptr = host->h_addr_list;
+        for (; *ptr != NULL && ip_count < MAX_IP_COUNT; ptr++)
+        {
+            char *servip = malloc(INET6_ADDRSTRLEN * sizeof(char));
+            if (servip == NULL)
+            {
+                perror("malloc");
+                continue;
+            }
+            if (inet_ntop(host->h_addrtype, *ptr, servip, INET6_ADDRSTRLEN) == NULL)
+            {
+                perror("inet_ntop");
+                free(servip);
+                continue;
+            }
+            ip_list[ip_count++] = servip;
+        }
+        break;
+    default:
+        printf("unknown address type\n");
+        break;
+    }
+
+    if (ip_count > 0)
+    {
+        printf("get IP [%s] successfully\n", hostname);
+        ip_list[ip_count] = NULL; // 用 NULL 结束 IP 地址列表
+        return ip_list;
+    }
+    else
+    {
+        free(ip_list);
+        return NULL;
+    }
 }
 
 
@@ -132,43 +143,64 @@ int socket_connect(socket_t *sock)
 	int						rv = -1;
 	int						fd = 0;
 	struct sockaddr_in		serv_addr;
-	char					ip[64];
+	int						i = 0;
 
-	//socket_close(sock);
-
-	fd = socket(AF_INET, SOCK_STREAM, 0);
-	if( fd < 0 )
+	if( !sock )
 	{
-		log_error("Creat socket failure:%s\n", strerror(errno));
-		close(fd);
-		return -4;
+		return -1;
 	}
-	log_info("Socket create fd[%d] successfully\n", fd);
 	
-	rv = judge_ip_hostname(sock->servip);
-	if( rv < 0 )
+	socket_close(sock);
+
+	char **ip_list = hostname_to_ip(sock->servip);
+	if( ip_list == NULL )
 	{
-		hostname_to_ip(sock->servip, ip, sizeof(ip));
-		strncpy(sock->servip, ip, 64);
+		log_error("resove ip failure\n");
+		return -2;
+	}
+	
+	if( (inet_addr(sock->servip))  == INADDR_NONE )
+	{
+		for(i=0; ip_list[i]!=NULL; i++)
+		{
+			fd = socket(AF_INET, SOCK_STREAM, 0);
+			if( fd < 0 )
+			{
+				log_error("Creat socket failure:%s\n", strerror(errno));
+				close(fd);
+				return -4;
+			}
+			log_info("Socket create fd[%d] successfully\n", fd);
+		
+
+			memset(&serv_addr, 0, sizeof(serv_addr));
+			serv_addr.sin_family = AF_INET;
+			serv_addr.sin_port = htons(sock->port);
+			inet_aton(ip_list[i], &serv_addr.sin_addr);
+	
+			rv = connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+			if( rv < 0 )
+			{
+				log_error("Connect to server [%s:%d] failure:%s\n", ip_list[i], sock->port, strerror(errno));
+				close(fd);
+				return -5;
+			}
+			else
+			{
+				sock->fd = fd;
+				log_info("Connect to server [%s:%d] successfully\n", ip_list[i], sock->port);
+				break;
+			}
+		}
+	
 	}
 
-	memset(&serv_addr, 0, sizeof(serv_addr));
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(sock->port);
-	inet_aton(sock->servip, &serv_addr.sin_addr);
-
-	rv = connect(fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-	if( rv < 0 )
+	for(i=0; ip_list[i]!=NULL; i++)
 	{
-		log_error("Connect to server [%s:%d] failure:%s\n", sock->servip, sock->port, strerror(errno));
-		close(fd);
-		return -5;
+		free(ip_list[i]);
 	}
-	else
-	{
-		sock->fd = fd;
-		log_debug("Connect to server [%s:%d] successfully\n", sock->servip, sock->port);
-	}
+	free(ip_list);
+	
 	return rv;
 }
 

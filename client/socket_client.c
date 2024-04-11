@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
 
 	if( daemon_run )
 	{
-		daemon(0, 0);
+		daemon(1, 0);
 	}
 
 	rv = open_database("client.db");
